@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { TrendingUp, ArrowLeftRight, PiggyBank, LogOut, Wallet, Target } from 'lucide-react'
+import { TrendingUp, ArrowLeftRight, PiggyBank, LogOut, Wallet, Target, Tag } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
@@ -12,6 +12,7 @@ const links = [
   { href: '/dashboard/presupuestos', label: 'Presupuestos', icon: PiggyBank },
   { href: '/dashboard/cuentas',      label: 'Cuentas',      icon: Wallet },
   { href: '/dashboard/metas',        label: 'Metas',        icon: Target },
+  { href: '/dashboard/categorias',   label: 'Categorías',   icon: Tag },
 ]
 
 export default function Navbar({ email }: { email: string }) {
