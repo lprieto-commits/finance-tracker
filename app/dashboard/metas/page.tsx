@@ -24,6 +24,7 @@ export default function MetasPage() {
   const [loading, setLoading]   = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving]     = useState(false)
+  const [error, setError]       = useState('')
   const [form, setForm]         = useState({
     nombre: '', monto_objetivo: '', monto_actual: '',
     fecha_objetivo: '', descripcion: '',
@@ -42,21 +43,29 @@ export default function MetasPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
-    await fetch('/api/metas', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        nombre: form.nombre,
-        monto_objetivo: parseFloat(form.monto_objetivo) || 0,
-        monto_actual: parseFloat(form.monto_actual) || 0,
-        fecha_objetivo: form.fecha_objetivo,
-        descripcion: form.descripcion || null,
-      }),
-    })
-    setForm({ nombre: '', monto_objetivo: '', monto_actual: '', fecha_objetivo: '', descripcion: '' })
-    setShowForm(false)
-    setSaving(false)
-    load()
+    setError('')
+    try {
+      const res = await fetch('/api/metas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: form.nombre,
+          monto_objetivo: parseFloat(form.monto_objetivo) || 0,
+          monto_actual: parseFloat(form.monto_actual) || 0,
+          fecha_objetivo: form.fecha_objetivo,
+          descripcion: form.descripcion || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error ?? 'Error al guardar'); return }
+      setForm({ nombre: '', monto_objetivo: '', monto_actual: '', fecha_objetivo: '', descripcion: '' })
+      setShowForm(false)
+      load()
+    } catch (err) {
+      setError('Error de conexión')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleDelete(id: string) {
@@ -151,12 +160,15 @@ export default function MetasPage() {
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
+            {error && (
+              <div className="text-xs text-red-400 bg-red-900/20 border border-red-800/50 rounded-lg px-3 py-2">{error}</div>
+            )}
             <div className="flex gap-3 pt-2">
               <button type="submit" disabled={saving}
                 className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-sm transition-all disabled:opacity-50">
                 {saving ? 'Guardando...' : 'Guardar meta'}
               </button>
-              <button type="button" onClick={() => setShowForm(false)}
+              <button type="button" onClick={() => { setShowForm(false); setError('') }}
                 className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-sm transition-all">
                 Cancelar
               </button>
