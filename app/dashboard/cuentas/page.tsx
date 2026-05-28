@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { formatCurrency } from '@/lib/utils'
-import { Wallet, CreditCard, Building2, Banknote, PiggyBank, Plus, Trash2, TrendingUp, TrendingDown } from 'lucide-react'
+import { Wallet, CreditCard, Building2, Banknote, PiggyBank, Plus, Trash2, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react'
+import TransferenciaModal from '../TransferenciaModal'
 
 type Cuenta = {
   id: string
@@ -31,10 +32,11 @@ const TIPO_LABELS: Record<string, string> = {
 }
 
 export default function CuentasPage() {
-  const [cuentas, setCuentas]   = useState<Cuenta[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [saving, setSaving]     = useState(false)
+  const [cuentas,      setCuentas]      = useState<Cuenta[]>([])
+  const [loading,      setLoading]      = useState(true)
+  const [showForm,     setShowForm]     = useState(false)
+  const [showTransfer, setShowTransfer] = useState(false)
+  const [saving,       setSaving]       = useState(false)
   const [form, setForm]         = useState({
     nombre: '', tipo: 'ahorro', es_deuda: false,
     saldo_inicial: '', limite_credito: '',
@@ -104,6 +106,13 @@ export default function CuentasPage() {
   const patrimon = activos - pasivos
 
   return (
+    <>
+    {showTransfer && (
+      <TransferenciaModal
+        onClose={() => setShowTransfer(false)}
+        onSaved={() => { setShowTransfer(false); load() }}
+      />
+    )}
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -111,11 +120,18 @@ export default function CuentasPage() {
           <h1 className="text-2xl font-bold text-white">Cuentas</h1>
           <p className="text-slate-500 text-sm mt-0.5">Saldos calculados en base a tus movimientos</p>
         </div>
-        <button onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-900/50">
-          <Plus className="w-4 h-4" />
-          Nueva cuenta
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowTransfer(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold rounded-xl transition-all">
+            <ArrowRight className="w-4 h-4" />
+            Transferir
+          </button>
+          <button onClick={() => setShowForm(!showForm)}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-900/50">
+            <Plus className="w-4 h-4" />
+            Nueva cuenta
+          </button>
+        </div>
       </div>
 
       {/* Net worth cards */}
@@ -325,5 +341,6 @@ export default function CuentasPage() {
         </div>
       )}
     </div>
+    </>
   )
 }
