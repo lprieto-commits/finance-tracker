@@ -1,10 +1,10 @@
 import Link from 'next/link'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { ArrowUpRight, ArrowDownRight, ArrowRight } from 'lucide-react'
 
 interface Movimiento {
   id: string; tipo: 'ingreso' | 'egreso'; monto: number
-  descripcion: string; fecha: string
+  descripcion: string; fecha: string; origen?: string
   categorias: { nombre: string; color: string } | null
 }
 
@@ -33,36 +33,51 @@ export default function UltimosMovimientos({
         </div>
       ) : (
         <ul>
-          {movimientos.map((m, i) => (
-            <li key={m.id} className={`flex items-center justify-between px-6 py-3.5 hover:bg-slate-800/50 transition-colors ${i < movimientos.length - 1 ? 'border-b border-slate-800/50' : ''}`}>
-              <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                  m.tipo === 'ingreso' ? 'bg-emerald-500/15' : 'bg-red-500/15'
-                }`}>
-                  {m.tipo === 'ingreso'
-                    ? <ArrowUpRight className="w-4 h-4 text-emerald-400" />
-                    : <ArrowDownRight className="w-4 h-4 text-red-400" />
-                  }
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white leading-tight">{m.descripcion}</p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    {m.categorias && (
-                      <>
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: m.categorias.color }} />
-                        <span className="text-xs text-slate-500">{m.categorias.nombre}</span>
-                        <span className="text-slate-700">·</span>
-                      </>
-                    )}
-                    <span className="text-xs text-slate-500">{formatDate(m.fecha)}</span>
+          {movimientos.map((m, i) => {
+            const esTransferencia = m.origen === 'transferencia'
+            return (
+              <li key={m.id} className={`flex items-center justify-between px-6 py-3.5 hover:bg-slate-800/50 transition-colors ${i < movimientos.length - 1 ? 'border-b border-slate-800/50' : ''}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                    esTransferencia ? 'bg-indigo-500/15' :
+                    m.tipo === 'ingreso' ? 'bg-emerald-500/15' : 'bg-red-500/15'
+                  }`}>
+                    {esTransferencia
+                      ? <ArrowRight className="w-4 h-4 text-indigo-400" />
+                      : m.tipo === 'ingreso'
+                        ? <ArrowUpRight className="w-4 h-4 text-emerald-400" />
+                        : <ArrowDownRight className="w-4 h-4 text-red-400" />
+                    }
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-white leading-tight">{m.descripcion}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      {esTransferencia && (
+                        <>
+                          <span className="text-xs text-indigo-400 font-medium">Transferencia</span>
+                          <span className="text-slate-700">·</span>
+                        </>
+                      )}
+                      {m.categorias && !esTransferencia && (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: m.categorias.color }} />
+                          <span className="text-xs text-slate-500">{m.categorias.nombre}</span>
+                          <span className="text-slate-700">·</span>
+                        </>
+                      )}
+                      <span className="text-xs text-slate-500">{formatDate(m.fecha)}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <span className={`text-sm font-bold tabular-nums ${m.tipo === 'ingreso' ? 'text-emerald-400' : 'text-red-400'}`}>
-                {m.tipo === 'ingreso' ? '+' : '-'}{formatCurrency(m.monto)}
-              </span>
-            </li>
-          ))}
+                <span className={`text-sm font-bold tabular-nums ${
+                  esTransferencia ? 'text-indigo-400' :
+                  m.tipo === 'ingreso' ? 'text-emerald-400' : 'text-red-400'
+                }`}>
+                  {esTransferencia ? '' : m.tipo === 'ingreso' ? '+' : '-'}{formatCurrency(m.monto)}
+                </span>
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>

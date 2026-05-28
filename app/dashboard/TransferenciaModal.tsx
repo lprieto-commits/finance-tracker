@@ -52,7 +52,7 @@ export default function TransferenciaModal({ onClose, onSaved }: Props) {
         fecha:       form.fecha,
         scope:       'personal',
         monto:       montoNum,
-        origen:      'manual',
+        origen:      'transferencia',
       }
 
       // Egreso de cuenta origen

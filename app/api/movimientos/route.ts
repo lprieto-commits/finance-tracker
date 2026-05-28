@@ -20,10 +20,12 @@ export async function GET(req: NextRequest) {
     .eq('user_id', user.id)
     .order('fecha', { ascending: false })
 
-  if (sp.get('desde')) q = q.gte('fecha', sp.get('desde')!)
-  if (sp.get('hasta')) q = q.lte('fecha', sp.get('hasta')!)
-  if (sp.get('scope')) q = q.eq('scope', sp.get('scope')!)
-  if (sp.get('tipo'))  q = q.eq('tipo',  sp.get('tipo')!)
+  if (sp.get('desde'))  q = q.gte('fecha',   sp.get('desde')!)
+  if (sp.get('hasta'))  q = q.lte('fecha',   sp.get('hasta')!)
+  if (sp.get('scope'))  q = q.eq('scope',    sp.get('scope')!)
+  if (sp.get('tipo'))   q = q.eq('tipo',     sp.get('tipo')!)
+  // Incluir transferencias solo si se pide explícitamente
+  if (sp.get('all') !== 'true') q = q.neq('origen', 'transferencia')
 
   const { data, error } = await q
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

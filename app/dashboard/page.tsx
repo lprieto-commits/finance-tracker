@@ -36,6 +36,7 @@ export default async function DashboardPage({
     .select('*, categorias(id, nombre, color)')
     .eq('user_id', user.id)
     .eq('scope', scope)
+    .neq('origen', 'transferencia')
     .gte('fecha', desde)
     .lte('fecha', hasta)
     .order('fecha', { ascending: false })
