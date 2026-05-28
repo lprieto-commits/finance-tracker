@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { formatCurrency } from '@/lib/utils'
-import { Target, Plus, Trash2, Calendar, TrendingUp, CheckCircle2 } from 'lucide-react'
+import { Target, Plus, Trash2, Calendar, TrendingUp, CheckCircle2, Wallet, PiggyBank, CreditCard, Building2, Banknote } from 'lucide-react'
 
 type Meta = {
   id: string
@@ -10,7 +10,15 @@ type Meta = {
   monto_objetivo: number
   monto_actual: number
   fecha_objetivo: string
-  descripcion: string | null
+  cuenta_id: string | null
+}
+
+type Cuenta = { id: string; nombre: string; tipo: string; es_deuda: boolean }
+type Movimiento = { cuenta_id: string | null; tipo: string; monto: number }
+
+const CUENTA_ICONS: Record<string, React.ElementType> = {
+  ahorro: PiggyBank, corriente: Building2, tarjeta: CreditCard,
+  prestamo: Banknote, efectivo: Wallet,
 }
 
 function calcularMeses(fechaObjetivo: string): number {
@@ -19,22 +27,49 @@ function calcularMeses(fechaObjetivo: string): number {
   return Math.max(1, (fin.getFullYear() - hoy.getFullYear()) * 12 + (fin.getMonth() - hoy.getMonth()))
 }
 
+function calcularSaldoCuenta(cuenta: Cuenta, movimientos: Movimiento[], saldoInicial: number): number {
+  const movs    = movimientos.filter(m => m.cuenta_id === cuenta.id)
+  const ingresos = movs.filter(m => m.tipo === 'ingreso').reduce((s, m) => s + m.monto, 0)
+  const egresos  = movs.filter(m => m.tipo === 'egreso').reduce((s, m) => s + m.monto, 0)
+  return cuenta.es_deuda
+    ? saldoInicial + egresos - ingresos
+    : saldoInicial + ingresos - egresos
+}
+
 export default function MetasPage() {
-  const [metas, setMetas]       = useState<Meta[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [saving, setSaving]     = useState(false)
-  const [error, setError]       = useState('')
-  const [form, setForm]         = useState({
-    nombre: '', monto_objetivo: '', monto_actual: '',
-    fecha_objetivo: '', descripcion: '',
+  const [metas,       setMetas]       = useState<Meta[]>([])
+  const [cuentas,     setCuentas]     = useState<Cuenta[]>([])
+  const [movimientos, setMovimientos] = useState<Movimiento[]>([])
+  const [cuentasSaldos, setCuentasSaldos] = useState<Record<string, number>>({})
+  const [loading,     setLoading]     = useState(true)
+  const [showForm,    setShowForm]    = useState(false)
+  const [saving,      setSaving]      = useState(false)
+  const [error,       setError]       = useState('')
+  const [form, setForm] = useState({
+    nombre: '', monto_objetivo: '', fecha_objetivo: '', cuenta_id: '',
   })
 
   async function load() {
     setLoading(true)
-    const res = await fetch('/api/metas')
-    const data = await res.json()
-    setMetas(Array.isArray(data) ? data : [])
+    const [mRes, cRes, movRes] = await Promise.all([
+      fetch('/api/metas').then(r => r.json()),
+      fetch('/api/cuentas').then(r => r.json()),
+      fetch('/api/movimientos?all=true').then(r => r.json()),
+    ])
+
+    const cuentasData: (Cuenta & { saldo_inicial: number })[] = Array.isArray(cRes) ? cRes : []
+    const movsData: Movimiento[] = Array.isArray(movRes) ? movRes : (movRes.movimientos ?? [])
+
+    // Calcular saldo real por cuenta
+    const saldos: Record<string, number> = {}
+    for (const c of cuentasData) {
+      saldos[c.id] = calcularSaldoCuenta(c, movsData, c.saldo_inicial)
+    }
+
+    setMetas(Array.isArray(mRes) ? mRes : [])
+    setCuentas(cuentasData)
+    setMovimientos(movsData)
+    setCuentasSaldos(saldos)
     setLoading(false)
   }
 
@@ -42,28 +77,28 @@ export default function MetasPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!form.nombre.trim()) { setError('Escribe un nombre'); return }
     setSaving(true)
     setError('')
     try {
       const payload: Record<string, unknown> = {
         nombre: form.nombre,
         monto_objetivo: parseFloat(form.monto_objetivo) || 0,
-        monto_actual: parseFloat(form.monto_actual) || 0,
+        monto_actual: 0,
         fecha_objetivo: form.fecha_objetivo,
       }
-      if (form.descripcion) payload.descripcion = form.descripcion
-      const res = await fetch('/api/metas', {
+      if (form.cuenta_id) payload.cuenta_id = form.cuenta_id
+
+      const res  = await fetch('/api/metas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? 'Error al guardar'); return }
-      setForm({ nombre: '', monto_objetivo: '', monto_actual: '', fecha_objetivo: '', descripcion: '' })
+      setForm({ nombre: '', monto_objetivo: '', fecha_objetivo: '', cuenta_id: '' })
       setShowForm(false)
       load()
-    } catch (err) {
-      setError('Error de conexión')
     } finally {
       setSaving(false)
     }
@@ -75,14 +110,7 @@ export default function MetasPage() {
     load()
   }
 
-  async function handleUpdateActual(meta: Meta, nuevo: number) {
-    await fetch(`/api/metas/${meta.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ monto_actual: nuevo }),
-    })
-    load()
-  }
+  const cuentasActivas = cuentas.filter((c: Cuenta) => !c.es_deuda)
 
   return (
     <div className="space-y-6">
@@ -90,7 +118,7 @@ export default function MetasPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Metas de ahorro</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Proyector de objetivos financieros</p>
+          <p className="text-slate-500 text-sm mt-0.5">Progreso calculado desde tu cuenta vinculada</p>
         </div>
         <button onClick={() => setShowForm(!showForm)}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-900/50">
@@ -99,7 +127,7 @@ export default function MetasPage() {
         </button>
       </div>
 
-      {/* New goal form */}
+      {/* Formulario */}
       {showForm && (
         <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6">
           <h2 className="font-bold text-white mb-4">Nueva meta de ahorro</h2>
@@ -107,63 +135,58 @@ export default function MetasPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Nombre de la meta</label>
-                <input
-                  type="text"
-                  value={form.nombre}
+                <input type="text" value={form.nombre}
                   onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
                   placeholder="Ej: Fondo de emergencia"
                   required
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Fecha objetivo</label>
-                <input
-                  type="date"
-                  value={form.fecha_objetivo}
+                <input type="date" value={form.fecha_objetivo}
                   onChange={e => setForm(f => ({ ...f, fecha_objetivo: e.target.value }))}
                   required
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Monto objetivo</label>
-                <input
-                  type="number"
-                  value={form.monto_objetivo}
-                  onChange={e => setForm(f => ({ ...f, monto_objetivo: e.target.value }))}
-                  placeholder="0.00"
-                  step="0.01" min="0" required
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Ahorrado hasta ahora</label>
-                <input
-                  type="number"
-                  value={form.monto_actual}
-                  onChange={e => setForm(f => ({ ...f, monto_actual: e.target.value }))}
-                  placeholder="0.00"
-                  step="0.01" min="0"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-            </div>
+
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Descripción (opcional)</label>
-              <input
-                type="text"
-                value={form.descripcion}
-                onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))}
-                placeholder="Para qué es esta meta..."
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
+              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Monto objetivo ($)</label>
+              <input type="number" value={form.monto_objetivo}
+                onChange={e => setForm(f => ({ ...f, monto_objetivo: e.target.value }))}
+                placeholder="0.00" step="0.01" min="0" required
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
-            {error && (
-              <div className="text-xs text-red-400 bg-red-900/20 border border-red-800/50 rounded-lg px-3 py-2">{error}</div>
+
+            {/* Vincular a cuenta */}
+            {cuentasActivas.length > 0 && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                  Vincular a cuenta (opcional — el progreso se calcula automático)
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {cuentasActivas.map((c: Cuenta) => {
+                    const Icon = CUENTA_ICONS[c.tipo] ?? Wallet
+                    const sel  = form.cuenta_id === c.id
+                    return (
+                      <button key={c.id} type="button"
+                        onClick={() => setForm(f => ({ ...f, cuenta_id: sel ? '' : c.id }))}
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all text-left ${
+                          sel
+                            ? 'border-indigo-500 bg-indigo-500/20 text-white'
+                            : 'border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600'
+                        }`}>
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{c.nombre}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
             )}
+
+            {error && <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/50 rounded-lg px-3 py-2">{error}</p>}
+
             <div className="flex gap-3 pt-2">
               <button type="submit" disabled={saving}
                 className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-sm transition-all disabled:opacity-50">
@@ -178,7 +201,7 @@ export default function MetasPage() {
         </div>
       )}
 
-      {/* Goals list */}
+      {/* Lista de metas */}
       {loading ? (
         <div className="flex items-center justify-center py-16">
           <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
@@ -189,16 +212,22 @@ export default function MetasPage() {
             <Target className="w-8 h-8 text-slate-600" />
           </div>
           <p className="text-slate-400 font-semibold">No tienes metas de ahorro</p>
-          <p className="text-slate-600 text-sm mt-1">Define objetivos financieros y rastrea tu progreso</p>
+          <p className="text-slate-600 text-sm mt-1">Define objetivos y vincúlalos a tus cuentas</p>
         </div>
       ) : (
         <div className="space-y-4">
           {metas.map(meta => {
-            const pct      = Math.min(100, (meta.monto_actual / meta.monto_objetivo) * 100)
-            const restante = Math.max(0, meta.monto_objetivo - meta.monto_actual)
+            // Si tiene cuenta vinculada, el progreso es el saldo real de esa cuenta
+            const cuentaVinculada = cuentas.find((c: Cuenta) => c.id === meta.cuenta_id)
+            const montoActual = meta.cuenta_id && cuentasSaldos[meta.cuenta_id] !== undefined
+              ? Math.max(0, cuentasSaldos[meta.cuenta_id])
+              : meta.monto_actual
+
+            const pct      = Math.min(100, (montoActual / meta.monto_objetivo) * 100)
+            const restante = Math.max(0, meta.monto_objetivo - montoActual)
             const meses    = calcularMeses(meta.fecha_objetivo)
             const mensual  = restante / meses
-            const cumplida = meta.monto_actual >= meta.monto_objetivo
+            const cumplida = montoActual >= meta.monto_objetivo
 
             return (
               <div key={meta.id} className="bg-slate-900 rounded-2xl border border-slate-800 p-6">
@@ -212,7 +241,12 @@ export default function MetasPage() {
                     </div>
                     <div>
                       <p className="font-bold text-white">{meta.nombre}</p>
-                      {meta.descripcion && <p className="text-xs text-slate-500">{meta.descripcion}</p>}
+                      {cuentaVinculada && (
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <Wallet className="w-3 h-3 text-indigo-400" />
+                          <p className="text-xs text-indigo-400">{cuentaVinculada.nombre}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -227,15 +261,15 @@ export default function MetasPage() {
                   </div>
                 </div>
 
-                {/* Progress bar */}
+                {/* Barra de progreso */}
                 <div className="mb-4">
                   <div className="flex justify-between text-sm mb-2">
-                    <span className="text-slate-400">{formatCurrency(meta.monto_actual)}</span>
+                    <span className="text-slate-400 font-semibold">{formatCurrency(montoActual)}</span>
                     <span className="text-slate-500">de {formatCurrency(meta.monto_objetivo)}</span>
                   </div>
                   <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ${cumplida ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                      className={`h-full rounded-full transition-all duration-700 ${cumplida ? 'bg-emerald-500' : 'bg-indigo-500'}`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
@@ -247,7 +281,7 @@ export default function MetasPage() {
                   </div>
                 </div>
 
-                {/* Projection */}
+                {/* Proyección */}
                 {!cumplida && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="bg-slate-800/60 rounded-xl p-3">
@@ -269,20 +303,12 @@ export default function MetasPage() {
                   </div>
                 )}
 
-                {/* Update current amount */}
-                <div className="mt-4 pt-4 border-t border-slate-800/50 flex items-center gap-3">
-                  <span className="text-xs text-slate-500">Actualizar progreso:</span>
-                  <input
-                    type="number"
-                    defaultValue={meta.monto_actual}
-                    step="0.01" min="0"
-                    onBlur={e => {
-                      const val = parseFloat(e.target.value)
-                      if (!isNaN(val) && val !== meta.monto_actual) handleUpdateActual(meta, val)
-                    }}
-                    className="w-36 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
+                {/* Nota si no tiene cuenta vinculada */}
+                {!cuentaVinculada && (
+                  <p className="text-xs text-slate-600 mt-3">
+                    💡 Vincula esta meta a una cuenta para que el progreso se actualice automáticamente
+                  </p>
+                )}
               </div>
             )
           })}

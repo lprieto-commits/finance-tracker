@@ -24,15 +24,17 @@ export async function POST(req: Request) {
 
   const body = await req.json()
   const admin = await createAdminClient()
+  const insert: Record<string, unknown> = {
+    user_id: user.id,
+    nombre: body.nombre,
+    monto_objetivo: body.monto_objetivo,
+    monto_actual: body.monto_actual ?? 0,
+    fecha_objetivo: body.fecha_objetivo,
+  }
+  if (body.cuenta_id) insert.cuenta_id = body.cuenta_id
   const { data, error } = await admin
     .from('metas_ahorro')
-    .insert({
-      user_id: user.id,
-      nombre: body.nombre,
-      monto_objetivo: body.monto_objetivo,
-      monto_actual: body.monto_actual ?? 0,
-      fecha_objetivo: body.fecha_objetivo,
-    })
+    .insert(insert)
     .select()
     .single()
 
