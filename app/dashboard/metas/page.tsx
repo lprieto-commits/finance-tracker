@@ -45,16 +45,17 @@ export default function MetasPage() {
     setSaving(true)
     setError('')
     try {
+      const payload: Record<string, unknown> = {
+        nombre: form.nombre,
+        monto_objetivo: parseFloat(form.monto_objetivo) || 0,
+        monto_actual: parseFloat(form.monto_actual) || 0,
+        fecha_objetivo: form.fecha_objetivo,
+      }
+      if (form.descripcion) payload.descripcion = form.descripcion
       const res = await fetch('/api/metas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nombre: form.nombre,
-          monto_objetivo: parseFloat(form.monto_objetivo) || 0,
-          monto_actual: parseFloat(form.monto_actual) || 0,
-          fecha_objetivo: form.fecha_objetivo,
-          descripcion: form.descripcion || null,
-        }),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? 'Error al guardar'); return }
