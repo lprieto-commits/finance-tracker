@@ -26,7 +26,13 @@ export async function POST(req: Request) {
   const admin = await createAdminClient()
   const { data, error } = await admin
     .from('metas_ahorro')
-    .insert({ ...body, user_id: user.id })
+    .insert({
+      user_id: user.id,
+      nombre: body.nombre,
+      monto_objetivo: body.monto_objetivo,
+      monto_actual: body.monto_actual ?? 0,
+      fecha_objetivo: body.fecha_objetivo,
+    })
     .select()
     .single()
 
