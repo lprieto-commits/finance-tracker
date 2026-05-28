@@ -11,22 +11,23 @@ type Cuenta = {
   es_deuda: boolean
   saldo_inicial: number
   limite_credito: number | null
+  saldo_real?: number
 }
 
 const TIPO_ICONS: Record<string, React.ElementType> = {
-  ahorro: PiggyBank,
+  ahorro:   PiggyBank,
   corriente: Building2,
-  tarjeta: CreditCard,
+  tarjeta:  CreditCard,
   prestamo: Banknote,
   efectivo: Wallet,
 }
 
 const TIPO_LABELS: Record<string, string> = {
-  ahorro: 'Ahorro',
+  ahorro:    'Cuenta de ahorro',
   corriente: 'Cuenta corriente',
-  tarjeta: 'Tarjeta de crédito',
-  prestamo: 'Préstamo',
-  efectivo: 'Efectivo',
+  tarjeta:   'Tarjeta de crédito',
+  prestamo:  'Préstamo',
+  efectivo:  'Efectivo',
 }
 
 export default function CuentasPage() {
@@ -41,9 +42,32 @@ export default function CuentasPage() {
 
   async function load() {
     setLoading(true)
-    const res = await fetch('/api/cuentas')
-    const data = await res.json()
-    setCuentas(Array.isArray(data) ? data : [])
+    const [cRes, mRes] = await Promise.all([
+      fetch('/api/cuentas').then(r => r.json()),
+      fetch('/api/movimientos?all=true').then(r => r.json()),
+    ])
+
+    const cuentasBase: Cuenta[] = Array.isArray(cRes) ? cRes : []
+    const movimientos: { cuenta_id: string; tipo: string; monto: number }[] = Array.isArray(mRes) ? mRes : (mRes.movimientos ?? [])
+
+    // Calcular saldo real por cuenta
+    const cuentasConSaldo = cuentasBase.map(c => {
+      const movsCuenta = movimientos.filter(m => m.cuenta_id === c.id)
+      const ingresos = movsCuenta.filter(m => m.tipo === 'ingreso').reduce((s, m) => s + m.monto, 0)
+      const egresos  = movsCuenta.filter(m => m.tipo === 'egreso').reduce((s, m) => s + m.monto, 0)
+
+      let saldo_real: number
+      if (c.es_deuda) {
+        // Para deudas: saldo inicial + egresos (gastos en tarjeta aumentan deuda) - ingresos (pagos reducen deuda)
+        saldo_real = c.saldo_inicial + egresos - ingresos
+      } else {
+        // Para activos: saldo inicial + ingresos - egresos
+        saldo_real = c.saldo_inicial + ingresos - egresos
+      }
+      return { ...c, saldo_real }
+    })
+
+    setCuentas(cuentasConSaldo)
     setLoading(false)
   }
 
@@ -58,7 +82,7 @@ export default function CuentasPage() {
       body: JSON.stringify({
         nombre: form.nombre,
         tipo: form.tipo,
-        es_deuda: form.tipo === 'tarjeta' || form.tipo === 'prestamo' || form.es_deuda,
+        es_deuda: form.tipo === 'tarjeta' || form.tipo === 'prestamo',
         saldo_inicial: parseFloat(form.saldo_inicial) || 0,
         limite_credito: form.limite_credito ? parseFloat(form.limite_credito) : null,
       }),
@@ -75,8 +99,8 @@ export default function CuentasPage() {
     load()
   }
 
-  const activos  = cuentas.filter(c => !c.es_deuda).reduce((s, c) => s + c.saldo_inicial, 0)
-  const pasivos  = cuentas.filter(c => c.es_deuda).reduce((s, c) => s + c.saldo_inicial, 0)
+  const activos  = cuentas.filter(c => !c.es_deuda).reduce((s, c) => s + (c.saldo_real ?? c.saldo_inicial), 0)
+  const pasivos  = cuentas.filter(c => c.es_deuda).reduce((s, c) => s + (c.saldo_real ?? c.saldo_inicial), 0)
   const patrimon = activos - pasivos
 
   return (
@@ -85,7 +109,7 @@ export default function CuentasPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Cuentas</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Activos y deudas</p>
+          <p className="text-slate-500 text-sm mt-0.5">Saldos calculados en base a tus movimientos</p>
         </div>
         <button onClick={() => setShowForm(!showForm)}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-900/50">
@@ -142,22 +166,17 @@ export default function CuentasPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Nombre</label>
-                <input
-                  type="text"
-                  value={form.nombre}
+                <input type="text" value={form.nombre}
                   onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
                   placeholder="Ej: Banco General Ahorro"
                   required
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Tipo</label>
-                <select
-                  value={form.tipo}
+                <select value={form.tipo}
                   onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                   {Object.entries(TIPO_LABELS).map(([v, l]) => (
                     <option key={v} value={v}>{l}</option>
                   ))}
@@ -167,30 +186,20 @@ export default function CuentasPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">
-                  {form.tipo === 'tarjeta' || form.tipo === 'prestamo' ? 'Saldo actual (deuda)' : 'Saldo actual'}
+                  {form.tipo === 'tarjeta' || form.tipo === 'prestamo' ? 'Deuda actual' : 'Saldo actual'}
                 </label>
-                <input
-                  type="number"
-                  value={form.saldo_inicial}
+                <input type="number" value={form.saldo_inicial}
                   onChange={e => setForm(f => ({ ...f, saldo_inicial: e.target.value }))}
-                  placeholder="0.00"
-                  step="0.01"
-                  min="0"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                  placeholder="0.00" step="0.01" min="0"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
-              {(form.tipo === 'tarjeta') && (
+              {form.tipo === 'tarjeta' && (
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Límite de crédito</label>
-                  <input
-                    type="number"
-                    value={form.limite_credito}
+                  <input type="number" value={form.limite_credito}
                     onChange={e => setForm(f => ({ ...f, limite_credito: e.target.value }))}
-                    placeholder="0.00"
-                    step="0.01"
-                    min="0"
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
+                    placeholder="0.00" step="0.01" min="0"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
               )}
             </div>
@@ -219,17 +228,18 @@ export default function CuentasPage() {
             <Wallet className="w-8 h-8 text-slate-600" />
           </div>
           <p className="text-slate-400 font-semibold">No tienes cuentas registradas</p>
-          <p className="text-slate-600 text-sm mt-1">Agrega tus cuentas bancarias, tarjetas y préstamos</p>
+          <p className="text-slate-600 text-sm mt-1">Agrega tu cuenta de ahorro, tarjeta de crédito y préstamos</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Assets */}
+          {/* Activos */}
           {cuentas.filter(c => !c.es_deuda).length > 0 && (
             <div>
               <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Activos</h2>
               <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
                 {cuentas.filter(c => !c.es_deuda).map((c, i, arr) => {
                   const Icon = TIPO_ICONS[c.tipo] ?? Wallet
+                  const saldo = c.saldo_real ?? c.saldo_inicial
                   return (
                     <div key={c.id} className={`flex items-center justify-between px-6 py-4 hover:bg-slate-800/50 transition-colors ${i < arr.length - 1 ? 'border-b border-slate-800/50' : ''}`}>
                       <div className="flex items-center gap-4">
@@ -242,7 +252,12 @@ export default function CuentasPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
-                        <p className="font-bold text-emerald-400 text-lg tabular-nums">{formatCurrency(c.saldo_inicial)}</p>
+                        <div className="text-right">
+                          <p className="font-bold text-emerald-400 text-lg tabular-nums">{formatCurrency(saldo)}</p>
+                          {c.saldo_real !== c.saldo_inicial && (
+                            <p className="text-xs text-slate-500">Inicial: {formatCurrency(c.saldo_inicial)}</p>
+                          )}
+                        </div>
                         <button onClick={() => handleDelete(c.id)}
                           className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-slate-800 transition-colors">
                           <Trash2 className="w-4 h-4" />
@@ -255,13 +270,15 @@ export default function CuentasPage() {
             </div>
           )}
 
-          {/* Liabilities */}
+          {/* Deudas */}
           {cuentas.filter(c => c.es_deuda).length > 0 && (
             <div>
               <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Deudas</h2>
               <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
                 {cuentas.filter(c => c.es_deuda).map((c, i, arr) => {
                   const Icon = TIPO_ICONS[c.tipo] ?? Wallet
+                  const saldo = c.saldo_real ?? c.saldo_inicial
+                  const pctUsado = c.limite_credito ? Math.min(100, (saldo / c.limite_credito) * 100) : null
                   return (
                     <div key={c.id} className={`flex items-center justify-between px-6 py-4 hover:bg-slate-800/50 transition-colors ${i < arr.length - 1 ? 'border-b border-slate-800/50' : ''}`}>
                       <div className="flex items-center gap-4">
@@ -279,15 +296,19 @@ export default function CuentasPage() {
                               </>
                             )}
                           </div>
+                          {pctUsado !== null && (
+                            <div className="mt-1.5 w-32 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${pctUsado > 80 ? 'bg-red-500' : pctUsado > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                style={{ width: `${pctUsado}%` }} />
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="text-right">
-                          <p className="font-bold text-red-400 text-lg tabular-nums">{formatCurrency(c.saldo_inicial)}</p>
-                          {c.limite_credito && (
-                            <p className="text-xs text-slate-500">
-                              {Math.round((c.saldo_inicial / c.limite_credito) * 100)}% usado
-                            </p>
+                          <p className="font-bold text-red-400 text-lg tabular-nums">{formatCurrency(saldo)}</p>
+                          {pctUsado !== null && (
+                            <p className="text-xs text-slate-500">{pctUsado.toFixed(0)}% usado</p>
                           )}
                         </div>
                         <button onClick={() => handleDelete(c.id)}

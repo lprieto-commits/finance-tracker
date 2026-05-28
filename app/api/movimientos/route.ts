@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const body = await req.json()
-  const { tipo, scope, monto, descripcion, fecha, categoria_id, notas } = body
+  const { tipo, scope, monto, descripcion, fecha, categoria_id, notas, cuenta_id } = body
 
   if (!['ingreso', 'egreso'].includes(tipo))
     return NextResponse.json({ error: 'Tipo inválido' }, { status: 400 })
@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
       descripcion:  descripcion.trim(),
       fecha,
       categoria_id: categoria_id || null,
+      cuenta_id:    cuenta_id    || null,
       notas:        notas?.trim() || null,
       origen:       'manual',
     })
