@@ -56,6 +56,7 @@ export default function NuevoMovimientoModal({ scope, onClose, onSaved, defaultT
     if (!form.descripcion.trim()) { setError('Descripción requerida'); return }
     if (isNaN(montoNum) || montoNum <= 0) { setError('Monto inválido'); return }
     if (!form.fecha) { setError('Fecha requerida'); return }
+    if (!form.cuenta_id) { setError('Selecciona una cuenta'); return }
     setLoading(true)
     try {
       const body: Record<string, unknown> = {
@@ -111,8 +112,9 @@ export default function NuevoMovimientoModal({ scope, onClose, onSaved, defaultT
           {/* Cuenta */}
           {cuentasFiltradas.length > 0 && (
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">
+              <label className="block text-xs font-semibold text-white mb-1.5">
                 {tipo === 'egreso' ? '¿De qué cuenta sale el dinero?' : '¿A qué cuenta entra el dinero?'}
+                <span className="text-red-400 ml-1">*</span>
               </label>
               <div className="grid grid-cols-2 gap-2">
                 {cuentasFiltradas.map(c => {
