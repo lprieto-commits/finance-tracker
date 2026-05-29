@@ -37,7 +37,7 @@ export default function NuevoMovimientoModal({ scope, onClose, onSaved, defaultT
     fetch(`/api/categorias?scope=${scope}`)
       .then(r => r.json())
       .then(d => setCategorias(d.categorias ?? []))
-    fetch('/api/cuentas')
+    fetch(`/api/cuentas?scope=${scope}`)
       .then(r => r.json())
       .then(d => setCuentas(Array.isArray(d) ? d : []))
   }, [scope])

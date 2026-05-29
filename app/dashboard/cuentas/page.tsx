@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { formatCurrency } from '@/lib/utils'
 import { Wallet, CreditCard, Building2, Banknote, PiggyBank, Plus, Trash2, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react'
 import TransferenciaModal from '../TransferenciaModal'
@@ -12,6 +13,7 @@ type Cuenta = {
   es_deuda: boolean
   saldo_inicial: number
   limite_credito: number | null
+  scope: 'personal' | 'negocio'
   saldo_real?: number
 }
 
@@ -32,6 +34,10 @@ const TIPO_LABELS: Record<string, string> = {
 }
 
 export default function CuentasPage() {
+  const searchParams = useSearchParams()
+  const router       = useRouter()
+  const scope        = (searchParams.get('scope') === 'negocio' ? 'negocio' : 'personal') as 'personal' | 'negocio'
+
   const [cuentas,      setCuentas]      = useState<Cuenta[]>([])
   const [loading,      setLoading]      = useState(true)
   const [showForm,     setShowForm]     = useState(false)
@@ -45,8 +51,8 @@ export default function CuentasPage() {
   async function load() {
     setLoading(true)
     const [cRes, mRes] = await Promise.all([
-      fetch('/api/cuentas').then(r => r.json()),
-      fetch('/api/movimientos?all=true').then(r => r.json()),
+      fetch(`/api/cuentas?scope=${scope}`).then(r => r.json()),
+      fetch(`/api/movimientos?all=true&scope=${scope}`).then(r => r.json()),
     ])
 
     const cuentasBase: Cuenta[] = Array.isArray(cRes) ? cRes : []
@@ -73,7 +79,7 @@ export default function CuentasPage() {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [scope])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -84,6 +90,7 @@ export default function CuentasPage() {
       body: JSON.stringify({
         nombre: form.nombre,
         tipo: form.tipo,
+        scope,
         es_deuda: form.tipo === 'tarjeta' || form.tipo === 'prestamo',
         saldo_inicial: parseFloat(form.saldo_inicial) || 0,
         limite_credito: form.limite_credito ? parseFloat(form.limite_credito) : null,
@@ -132,6 +139,18 @@ export default function CuentasPage() {
             Nueva cuenta
           </button>
         </div>
+      </div>
+
+      {/* Scope toggle */}
+      <div className="flex gap-1 bg-slate-800 p-1 rounded-xl w-fit">
+        {(['personal', 'negocio'] as const).map(s => (
+          <button key={s} onClick={() => router.push(`/dashboard/cuentas?scope=${s}`)}
+            className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all capitalize ${
+              scope === s ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
+            }`}>
+            {s === 'personal' ? 'Personal' : 'Negocio'}
+          </button>
+        ))}
       </div>
 
       {/* Net worth cards */}
