@@ -32,7 +32,7 @@ export default async function MovimientosPage({
 
   let q = admin
     .from('movimientos')
-    .select('*, categorias(id, nombre, color)')
+    .select('*, categorias(id, nombre, color), cuentas(id, nombre, tipo)')
     .eq('user_id', user.id)
     .eq('scope', scope)
     .gte('fecha', desde)
@@ -40,12 +40,9 @@ export default async function MovimientosPage({
     .order('fecha', { ascending: false })
     .order('created_at', { ascending: false })
 
-  if (tipo && ['ingreso', 'egreso'].includes(tipo)) {
-    q = q.eq('tipo', tipo)
-  }
+  if (tipo && ['ingreso', 'egreso'].includes(tipo)) q = q.eq('tipo', tipo)
 
   const { data: movs } = await q
-
   const { data: cats } = await admin
     .from('categorias')
     .select('id, nombre, tipo, scope, color')
@@ -55,7 +52,7 @@ export default async function MovimientosPage({
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-gray-900">Movimientos</h1>
+      <h1 className="text-2xl font-bold text-white">Movimientos</h1>
       <MovimientosClient
         movimientos={(movs ?? []) as any[]}
         categorias={(cats ?? []) as any[]}

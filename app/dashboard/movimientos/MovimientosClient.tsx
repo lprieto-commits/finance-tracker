@@ -2,15 +2,21 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, Upload, X, Check, FileText } from 'lucide-react'
+import { Plus, Trash2, Upload, X, Check, FileText, ArrowUpRight, ArrowDownRight, ArrowRight, ChevronDown, ChevronUp, Wallet } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import NuevoMovimientoModal from '../NuevoMovimientoModal'
 
 interface Movimiento {
-  id: string; tipo: 'ingreso' | 'egreso'; monto: number
-  descripcion: string; fecha: string; notas: string | null; origen: string
+  id: string
+  tipo: 'ingreso' | 'egreso'
+  monto: number
+  descripcion: string
+  fecha: string
+  notas: string | null
+  origen: string
   categorias: { id: string; nombre: string; color: string } | null
+  cuentas: { id: string; nombre: string; tipo: string } | null
 }
 
 interface Props {
@@ -42,12 +48,13 @@ function excelDateToISO(val: unknown): string {
 export default function MovimientosClient({ movimientos, desde, hasta, scope, tipoFiltro }: Props) {
   const router  = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
-  const [modal,     setModal]     = useState(false)
-  const [deleting,  setDeleting]  = useState<string | null>(null)
-  const [filas,     setFilas]     = useState<FilaImport[]>([])
-  const [importing, setImporting] = useState(false)
-  const [importOk,  setImportOk]  = useState(false)
-  const [importErr, setImportErr] = useState('')
+  const [modal,      setModal]      = useState(false)
+  const [deleting,   setDeleting]   = useState<string | null>(null)
+  const [expandido,  setExpandido]  = useState<string | null>(null)
+  const [filas,      setFilas]      = useState<FilaImport[]>([])
+  const [importing,  setImporting]  = useState(false)
+  const [importOk,   setImportOk]   = useState(false)
+  const [importErr,  setImportErr]  = useState('')
   const [localDesde, setLocalDesde] = useState(desde)
   const [localHasta, setLocalHasta] = useState(hasta)
   const [localTipo,  setLocalTipo]  = useState(tipoFiltro)
@@ -126,8 +133,11 @@ export default function MovimientosClient({ movimientos, desde, hasta, scope, ti
     } finally { setImporting(false) }
   }
 
-  const totalIngresos = movimientos.filter(m => m.tipo === 'ingreso').reduce((s, m) => s + m.monto, 0)
-  const totalEgresos  = movimientos.filter(m => m.tipo === 'egreso').reduce((s, m) => s + m.monto, 0)
+  // Separar transferencias de movimientos normales para los totales
+  const normales      = movimientos.filter(m => m.origen !== 'transferencia')
+  const transferencias = movimientos.filter(m => m.origen === 'transferencia')
+  const totalIngresos = normales.filter(m => m.tipo === 'ingreso').reduce((s, m) => s + m.monto, 0)
+  const totalEgresos  = normales.filter(m => m.tipo === 'egreso').reduce((s, m) => s + m.monto, 0)
 
   return (
     <>
@@ -136,7 +146,7 @@ export default function MovimientosClient({ movimientos, desde, hasta, scope, ti
         {(['personal', 'negocio'] as const).map(s => (
           <a key={s} href={`?desde=${desde}&hasta=${hasta}&scope=${s}`}
             className={`px-4 py-1.5 rounded-full text-sm font-medium capitalize transition-colors ${
-              scope === s ? 'bg-indigo-600 text-white' : 'bg-slate-800 border border-slate-600 text-slate-300 hover:border-slate-500'
+              scope === s ? 'bg-indigo-600 text-white' : 'bg-slate-800 border border-slate-700 text-slate-300 hover:border-slate-500'
             }`}>
             {s === 'personal' ? 'Personal' : 'Negocio'}
           </a>
@@ -144,37 +154,37 @@ export default function MovimientosClient({ movimientos, desde, hasta, scope, ti
       </div>
 
       {/* Filtros */}
-      <div className="bg-slate-800 rounded-2xl border border-slate-700 p-4 flex flex-wrap items-end gap-3">
+      <div className="bg-slate-900 rounded-2xl border border-slate-800 p-4 flex flex-wrap items-end gap-3">
         <div>
           <label className="block text-xs text-slate-400 mb-1">Desde</label>
           <input type="date" value={localDesde} onChange={e => setLocalDesde(e.target.value)}
-            className="px-3 py-1.5 rounded-xl border border-slate-600 bg-slate-900 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-800 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
         </div>
         <div>
           <label className="block text-xs text-slate-400 mb-1">Hasta</label>
           <input type="date" value={localHasta} onChange={e => setLocalHasta(e.target.value)}
-            className="px-3 py-1.5 rounded-xl border border-slate-600 bg-slate-900 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-800 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
         </div>
         <div>
           <label className="block text-xs text-slate-400 mb-1">Tipo</label>
           <select value={localTipo} onChange={e => setLocalTipo(e.target.value)}
-            className="px-3 py-1.5 rounded-xl border border-slate-600 bg-slate-900 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            className="px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-800 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
             <option value="">Todos</option>
             <option value="ingreso">Ingresos</option>
             <option value="egreso">Egresos</option>
           </select>
         </div>
         <button onClick={applyFilters}
-          className="px-4 py-1.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors">
+          className="px-4 py-1.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-500 transition-colors">
           Filtrar
         </button>
         <div className="ml-auto flex gap-2">
           <button onClick={() => setModal(true)}
-            className="flex items-center gap-2 px-4 py-1.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors">
+            className="flex items-center gap-2 px-4 py-1.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-500 transition-colors">
             <Plus className="w-4 h-4" /> Nuevo
           </button>
           <label className="flex items-center gap-2 px-4 py-1.5 bg-slate-700 text-slate-200 text-sm font-semibold rounded-xl hover:bg-slate-600 transition-colors cursor-pointer">
-            <Upload className="w-4 h-4" /> Importar CSV/XLSX
+            <Upload className="w-4 h-4" /> Importar
             <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFile} />
           </label>
         </div>
@@ -182,7 +192,7 @@ export default function MovimientosClient({ movimientos, desde, hasta, scope, ti
 
       {/* Preview importación */}
       {filas.length > 0 && (
-        <div className="bg-slate-800 rounded-2xl border border-amber-700 overflow-hidden">
+        <div className="bg-slate-900 rounded-2xl border border-amber-700 overflow-hidden">
           <div className="px-5 py-4 bg-amber-900/40 border-b border-amber-700 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-amber-400" />
@@ -202,7 +212,7 @@ export default function MovimientosClient({ movimientos, desde, hasta, scope, ti
           </div>
           <div className="overflow-x-auto max-h-56">
             <table className="w-full text-xs">
-              <thead className="bg-slate-900 border-b border-slate-700 sticky top-0">
+              <thead className="bg-slate-800 border-b border-slate-700 sticky top-0">
                 <tr>
                   <th className="text-left px-4 py-2 font-medium text-slate-400">Fecha</th>
                   <th className="text-left px-4 py-2 font-medium text-slate-400">Descripción</th>
@@ -234,68 +244,173 @@ export default function MovimientosClient({ movimientos, desde, hasta, scope, ti
       {importErr && <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-red-400 text-sm">{importErr}</div>}
       {importOk  && <div className="bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-3 text-emerald-400 text-sm font-medium">Importación exitosa</div>}
 
-      {/* Totales */}
+      {/* Totales — solo movimientos normales */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-slate-800 rounded-2xl border border-slate-700 p-4 text-center">
-          <p className="text-xs text-slate-400 mb-1">Total ingresos</p>
-          <p className="text-xl font-bold text-emerald-400">{formatCurrency(totalIngresos)}</p>
+        <div className="bg-gradient-to-br from-emerald-900/80 to-emerald-950 rounded-2xl border border-emerald-800/50 p-4 text-center">
+          <p className="text-xs text-emerald-400 font-semibold uppercase tracking-wide mb-1">Ingresos</p>
+          <p className="text-xl font-bold text-white">{formatCurrency(totalIngresos)}</p>
         </div>
-        <div className="bg-slate-800 rounded-2xl border border-slate-700 p-4 text-center">
-          <p className="text-xs text-slate-400 mb-1">Total egresos</p>
-          <p className="text-xl font-bold text-red-400">{formatCurrency(totalEgresos)}</p>
+        <div className="bg-gradient-to-br from-red-900/80 to-red-950 rounded-2xl border border-red-800/50 p-4 text-center">
+          <p className="text-xs text-red-400 font-semibold uppercase tracking-wide mb-1">Egresos</p>
+          <p className="text-xl font-bold text-white">{formatCurrency(totalEgresos)}</p>
         </div>
       </div>
 
-      {/* Tabla */}
-      <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-700">
+      {/* Lista de movimientos */}
+      <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
           <h2 className="font-semibold text-white text-sm">{movimientos.length} movimiento{movimientos.length !== 1 ? 's' : ''}</h2>
+          {transferencias.length > 0 && (
+            <span className="text-xs text-indigo-400">{transferencias.length} transferencia{transferencias.length > 1 ? 's' : ''} (no cuentan en totales)</span>
+          )}
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-900 border-b border-slate-700">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-slate-400">Descripción</th>
-                <th className="text-left px-4 py-3 font-medium text-slate-400">Categoría</th>
-                <th className="text-left px-4 py-3 font-medium text-slate-400">Fecha</th>
-                <th className="text-right px-4 py-3 font-medium text-slate-400">Monto</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-700">
-              {movimientos.map(m => (
-                <tr key={m.id} className="hover:bg-slate-700/50">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-white">{m.descripcion}</p>
-                    {m.notas && <p className="text-xs text-slate-500 mt-0.5">{m.notas}</p>}
-                  </td>
-                  <td className="px-4 py-3">
-                    {m.categorias
-                      ? <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-700 text-slate-200">
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: m.categorias.color }} />
-                          {m.categorias.nombre}
-                        </span>
-                      : <span className="text-slate-500 text-xs">—</span>
+
+        <ul className="divide-y divide-slate-800/50">
+          {movimientos.map(m => {
+            const esTransferencia = m.origen === 'transferencia'
+            const abierto = expandido === m.id
+
+            return (
+              <li key={m.id}>
+                {/* Fila principal — click para expandir */}
+                <button
+                  type="button"
+                  onClick={() => setExpandido(abierto ? null : m.id)}
+                  className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-slate-800/50 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    {/* Ícono */}
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                      esTransferencia ? 'bg-indigo-500/15' :
+                      m.tipo === 'ingreso' ? 'bg-emerald-500/15' : 'bg-red-500/15'
+                    }`}>
+                      {esTransferencia
+                        ? <ArrowRight className="w-4 h-4 text-indigo-400" />
+                        : m.tipo === 'ingreso'
+                          ? <ArrowUpRight className="w-4 h-4 text-emerald-400" />
+                          : <ArrowDownRight className="w-4 h-4 text-red-400" />
+                      }
+                    </div>
+
+                    {/* Descripción y meta */}
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-white truncate">{m.descripcion}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        {esTransferencia && (
+                          <span className="text-xs font-medium text-indigo-400">Transferencia</span>
+                        )}
+                        {m.categorias && !esTransferencia && (
+                          <span className="inline-flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: m.categorias.color }} />
+                            <span className="text-xs text-slate-500">{m.categorias.nombre}</span>
+                          </span>
+                        )}
+                        {m.cuentas && (
+                          <>
+                            {(m.categorias || esTransferencia) && <span className="text-slate-700">·</span>}
+                            <span className="inline-flex items-center gap-1">
+                              <Wallet className="w-3 h-3 text-slate-600" />
+                              <span className="text-xs text-slate-500">{m.cuentas.nombre}</span>
+                            </span>
+                          </>
+                        )}
+                        <span className="text-slate-700">·</span>
+                        <span className="text-xs text-slate-500">{formatDate(m.fecha)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0 ml-3">
+                    <span className={`text-sm font-bold tabular-nums ${
+                      esTransferencia ? 'text-indigo-400' :
+                      m.tipo === 'ingreso' ? 'text-emerald-400' : 'text-red-400'
+                    }`}>
+                      {esTransferencia ? '' : m.tipo === 'ingreso' ? '+' : '-'}{formatCurrency(m.monto)}
+                    </span>
+                    {abierto
+                      ? <ChevronUp className="w-4 h-4 text-slate-500" />
+                      : <ChevronDown className="w-4 h-4 text-slate-500" />
                     }
-                  </td>
-                  <td className="px-4 py-3 text-slate-400">{formatDate(m.fecha)}</td>
-                  <td className={`px-4 py-3 text-right font-semibold ${m.tipo === 'ingreso' ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {m.tipo === 'ingreso' ? '+' : '-'}{formatCurrency(m.monto)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button onClick={() => handleDelete(m.id)} disabled={deleting === m.id}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-950 disabled:opacity-50 transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {movimientos.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-500">No hay movimientos en este período</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                </button>
+
+                {/* Panel expandido */}
+                {abierto && (
+                  <div className="px-5 pb-4 bg-slate-800/30 border-t border-slate-800/50">
+                    <div className="pt-4 grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Tipo</p>
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                          esTransferencia ? 'bg-indigo-500/20 text-indigo-300' :
+                          m.tipo === 'ingreso' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'
+                        }`}>
+                          {esTransferencia ? 'Transferencia' : m.tipo === 'ingreso' ? '↑ Ingreso' : '↓ Egreso'}
+                        </span>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Monto</p>
+                        <p className={`font-bold text-base ${
+                          esTransferencia ? 'text-indigo-400' :
+                          m.tipo === 'ingreso' ? 'text-emerald-400' : 'text-red-400'
+                        }`}>{formatCurrency(m.monto)}</p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Fecha</p>
+                        <p className="text-white">{formatDate(m.fecha)}</p>
+                      </div>
+
+                      {m.cuentas && (
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                            {esTransferencia
+                              ? m.tipo === 'egreso' ? 'Cuenta origen' : 'Cuenta destino'
+                              : 'Cuenta'
+                            }
+                          </p>
+                          <div className="flex items-center gap-1.5">
+                            <Wallet className="w-3.5 h-3.5 text-slate-400" />
+                            <p className="text-white">{m.cuentas.nombre}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {m.categorias && !esTransferencia && (
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Categoría</p>
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.categorias.color }} />
+                            <span className="text-white">{m.categorias.nombre}</span>
+                          </span>
+                        </div>
+                      )}
+
+                      {m.notas && (
+                        <div className="col-span-2">
+                          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Notas</p>
+                          <p className="text-slate-300">{m.notas}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-700/50 flex justify-end">
+                      <button onClick={() => handleDelete(m.id)} disabled={deleting === m.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-400 hover:bg-red-900/30 disabled:opacity-50 transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" />
+                        {deleting === m.id ? 'Eliminando...' : 'Eliminar movimiento'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            )
+          })}
+
+          {movimientos.length === 0 && (
+            <li className="px-5 py-12 text-center text-slate-500">No hay movimientos en este período</li>
+          )}
+        </ul>
       </div>
 
       {modal && <NuevoMovimientoModal scope={scope} onClose={() => setModal(false)} onSaved={() => { setModal(false); router.refresh() }} />}
