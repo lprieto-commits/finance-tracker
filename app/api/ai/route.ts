@@ -73,23 +73,12 @@ Responde únicamente con el nombre de la categoría.`
   }
 
   const message = await anthropic.messages.create({
-    model: 'claude-opus-4-7',
+    model: 'claude-opus-4-5',
     max_tokens: 1024,
     messages: [{ role: 'user', content: prompt }],
   })
 
   const texto = message.content[0].type === 'text' ? message.content[0].text : ''
-
-  if (tipo === 'insights') {
-    await admin.from('ai_insights').upsert({
-      user_id: user.id,
-      anio,
-      mes,
-      tipo: 'insights',
-      contenido: texto,
-      generado_en: new Date().toISOString(),
-    }, { onConflict: 'user_id,anio,mes,tipo' })
-  }
 
   return NextResponse.json({ texto })
 }
