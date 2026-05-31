@@ -5,7 +5,7 @@ import { formatCurrency } from '@/lib/utils'
 import {
   Target, Plus, Trash2, Calendar, TrendingUp, TrendingDown,
   CheckCircle2, Wallet, PiggyBank, CreditCard, Building2,
-  Banknote, AlertTriangle, XCircle, ArrowUpRight, ArrowDownRight, Zap,
+  Banknote, AlertTriangle, XCircle, ArrowUpRight, ArrowDownRight, Zap, Link, X,
 } from 'lucide-react'
 
 type Meta = {
@@ -79,14 +79,15 @@ function addMonths(date: Date, months: number): Date {
 }
 
 export default function MetasPage() {
-  const [metas,       setMetas]       = useState<Meta[]>([])
-  const [cuentas,     setCuentas]     = useState<Cuenta[]>([])
-  const [movimientos, setMovimientos] = useState<Movimiento[]>([])
+  const [metas,         setMetas]         = useState<Meta[]>([])
+  const [cuentas,       setCuentas]       = useState<Cuenta[]>([])
+  const [movimientos,   setMovimientos]   = useState<Movimiento[]>([])
   const [cuentasSaldos, setCuentasSaldos] = useState<Record<string, number>>({})
-  const [loading,     setLoading]     = useState(true)
-  const [showForm,    setShowForm]    = useState(false)
-  const [saving,      setSaving]      = useState(false)
-  const [error,       setError]       = useState('')
+  const [loading,       setLoading]       = useState(true)
+  const [showForm,      setShowForm]      = useState(false)
+  const [saving,        setSaving]        = useState(false)
+  const [error,         setError]         = useState('')
+  const [vinculando,    setVinculando]    = useState<string | null>(null)
   const [form, setForm] = useState({
     nombre: '', monto_objetivo: '', fecha_objetivo: '', cuenta_id: '',
   })
@@ -148,6 +149,16 @@ export default function MetasPage() {
   async function handleDelete(id: string) {
     if (!confirm('¿Eliminar esta meta?')) return
     await fetch(`/api/metas/${id}`, { method: 'DELETE' })
+    load()
+  }
+
+  async function handleVincular(metaId: string, cuentaId: string | null) {
+    await fetch(`/api/metas/${metaId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cuenta_id: cuentaId }),
+    })
+    setVinculando(null)
     load()
   }
 
@@ -423,6 +434,45 @@ export default function MetasPage() {
                       </div>
                     )}
 
+                    {/* Cambiar cuenta vinculada */}
+                    {vinculando === meta.id ? (
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-slate-300">Selecciona otra cuenta:</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {cuentasActivas.map(c => {
+                            const Icon = CUENTA_ICONS[c.tipo] ?? Wallet
+                            return (
+                              <button key={c.id} onClick={() => handleVincular(meta.id, c.id)}
+                                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all text-left ${
+                                  meta.cuenta_id === c.id
+                                    ? 'border-indigo-500 bg-indigo-500/20 text-white'
+                                    : 'border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:bg-indigo-500/10 hover:text-white'
+                                }`}>
+                                <Icon className="w-4 h-4 shrink-0" />
+                                <span className="truncate">{c.nombre}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <div className="flex gap-3">
+                          <button onClick={() => handleVincular(meta.id, null)}
+                            className="text-xs text-red-400 hover:text-red-300 transition-colors">
+                            Desvincular cuenta
+                          </button>
+                          <button onClick={() => setVinculando(null)}
+                            className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                            <X className="w-3 h-3" /> Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button onClick={() => setVinculando(meta.id)}
+                        className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-indigo-400 transition-colors">
+                        <Link className="w-3 h-3" />
+                        Cambiar cuenta vinculada
+                      </button>
+                    )}
+
                     {/* Mes actual */}
                     {mesActual && (
                       <div>
@@ -453,7 +503,7 @@ export default function MetasPage() {
 
                 {/* Sin cuenta vinculada */}
                 {!cumplida && !cuentaVinculada && (
-                  <div className="border-t border-slate-800 px-6 py-4">
+                  <div className="border-t border-slate-800 px-6 py-4 space-y-3">
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-slate-800/60 rounded-xl p-3">
                         <div className="flex items-center gap-1.5 mb-1">
@@ -472,9 +522,35 @@ export default function MetasPage() {
                         <p className="text-xs text-slate-500">{meses === 1 ? 'mes' : 'meses'}</p>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-600 mt-3">
-                      💡 Vincula esta meta a una cuenta para ver proyecciones en tiempo real
-                    </p>
+
+                    {/* Selector de cuenta */}
+                    {vinculando === meta.id ? (
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-slate-300">Selecciona la cuenta a vincular:</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {cuentasActivas.map(c => {
+                            const Icon = CUENTA_ICONS[c.tipo] ?? Wallet
+                            return (
+                              <button key={c.id} onClick={() => handleVincular(meta.id, c.id)}
+                                className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:bg-indigo-500/10 hover:text-white text-sm font-medium transition-all text-left">
+                                <Icon className="w-4 h-4 shrink-0" />
+                                <span className="truncate">{c.nombre}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <button onClick={() => setVinculando(null)}
+                          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                          <X className="w-3 h-3" /> Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setVinculando(meta.id)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl border border-indigo-800/50 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 text-xs font-semibold transition-all w-full justify-center">
+                        <Link className="w-3.5 h-3.5" />
+                        Vincular a una cuenta
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
