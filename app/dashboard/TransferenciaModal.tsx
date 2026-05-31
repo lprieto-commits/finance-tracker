@@ -16,9 +16,10 @@ const CUENTA_ICONS: Record<string, React.ElementType> = {
 interface Props {
   onClose:  () => void
   onSaved:  () => void
+  scope?:   'personal' | 'negocio'
 }
 
-export default function TransferenciaModal({ onClose, onSaved }: Props) {
+export default function TransferenciaModal({ onClose, onSaved, scope = 'personal' }: Props) {
   const [cuentas,  setCuentas]  = useState<Cuenta[]>([])
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState('')
@@ -31,8 +32,8 @@ export default function TransferenciaModal({ onClose, onSaved }: Props) {
   })
 
   useEffect(() => {
-    fetch('/api/cuentas').then(r => r.json()).then(d => setCuentas(Array.isArray(d) ? d : []))
-  }, [])
+    fetch(`/api/cuentas?scope=${scope}`).then(r => r.json()).then(d => setCuentas(Array.isArray(d) ? d : []))
+  }, [scope])
 
   const cuentaOrigen  = cuentas.find(c => c.id === form.cuenta_origen)
   const cuentaDestino = cuentas.find(c => c.id === form.cuenta_destino)
@@ -50,7 +51,7 @@ export default function TransferenciaModal({ onClose, onSaved }: Props) {
     try {
       const base = {
         fecha:       form.fecha,
-        scope:       'personal',
+        scope,
         monto:       montoNum,
         origen:      'transferencia',
       }

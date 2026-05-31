@@ -116,6 +116,7 @@ export default function CuentasPage() {
     <>
     {showTransfer && (
       <TransferenciaModal
+        scope={scope}
         onClose={() => setShowTransfer(false)}
         onSaved={() => { setShowTransfer(false); load() }}
       />
@@ -342,6 +343,11 @@ export default function CuentasPage() {
                       <div className="flex items-center gap-4">
                         <div className="text-right">
                           <p className="font-bold text-red-400 text-lg tabular-nums">{formatCurrency(saldo)}</p>
+                          {c.limite_credito && (
+                            <p className="text-xs text-emerald-500 font-semibold">
+                              Disponible: {formatCurrency(Math.max(0, c.limite_credito - saldo))}
+                            </p>
+                          )}
                           {pctUsado !== null && (
                             <p className="text-xs text-slate-500">{pctUsado.toFixed(0)}% usado</p>
                           )}
