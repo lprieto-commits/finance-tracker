@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, Upload, X, Check, FileText, ArrowUpRight, ArrowDownRight, ArrowRight, ChevronDown, ChevronUp, Wallet } from 'lucide-react'
+import { Plus, Trash2, Upload, X, Check, FileText, ArrowUpRight, ArrowDownRight, ArrowRight, ChevronDown, ChevronUp, Wallet, Pencil } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import NuevoMovimientoModal from '../NuevoMovimientoModal'
@@ -45,12 +45,17 @@ function excelDateToISO(val: unknown): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-export default function MovimientosClient({ movimientos, desde, hasta, scope, tipoFiltro }: Props) {
+export default function MovimientosClient({ movimientos, desde, hasta, scope, tipoFiltro, categorias }: Props) {
   const router  = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
   const [modal,      setModal]      = useState(false)
   const [deleting,   setDeleting]   = useState<string | null>(null)
   const [expandido,  setExpandido]  = useState<string | null>(null)
+  const [editando,   setEditando]   = useState<string | null>(null)
+  const [editForm,   setEditForm]   = useState<Record<string,string>>({})
+  const [editSaving, setEditSaving] = useState(false)
+  const [editErr,    setEditErr]    = useState('')
+  const [cuentas,    setCuentas]    = useState<{id:string;nombre:string}[]>([])
   const [filas,      setFilas]      = useState<FilaImport[]>([])
   const [importing,  setImporting]  = useState(false)
   const [importOk,   setImportOk]   = useState(false)
@@ -58,6 +63,51 @@ export default function MovimientosClient({ movimientos, desde, hasta, scope, ti
   const [localDesde, setLocalDesde] = useState(desde)
   const [localHasta, setLocalHasta] = useState(hasta)
   const [localTipo,  setLocalTipo]  = useState(tipoFiltro)
+
+  useEffect(() => {
+    fetch(`/api/cuentas?scope=${scope}`).then(r => r.json()).then(d => setCuentas(Array.isArray(d) ? d : []))
+  }, [scope])
+
+  function startEdit(m: Movimiento) {
+    setEditando(m.id)
+    setEditErr('')
+    setEditForm({
+      tipo:         m.tipo,
+      descripcion:  m.descripcion,
+      monto:        String(m.monto),
+      fecha:        m.fecha,
+      categoria_id: m.categorias?.id ?? '',
+      cuenta_id:    m.cuentas?.id    ?? '',
+      notas:        m.notas          ?? '',
+    })
+  }
+
+  async function handleEditSave(id: string) {
+    setEditErr('')
+    const montoNum = parseFloat(editForm.monto)
+    if (!editForm.descripcion.trim()) { setEditErr('Descripción requerida'); return }
+    if (isNaN(montoNum) || montoNum <= 0) { setEditErr('Monto inválido'); return }
+    setEditSaving(true)
+    try {
+      const res = await fetch(`/api/movimientos/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo:         editForm.tipo,
+          descripcion:  editForm.descripcion,
+          monto:        montoNum,
+          fecha:        editForm.fecha,
+          categoria_id: editForm.categoria_id || null,
+          cuenta_id:    editForm.cuenta_id    || null,
+          notas:        editForm.notas        || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setEditErr(data.error ?? 'Error al guardar'); return }
+      setEditando(null)
+      router.refresh()
+    } finally { setEditSaving(false) }
+  }
 
   function applyFilters() {
     const p = new URLSearchParams({ desde: localDesde, hasta: localHasta, scope })
@@ -337,70 +387,159 @@ export default function MovimientosClient({ movimientos, desde, hasta, scope, ti
                 {/* Panel expandido */}
                 {abierto && (
                   <div className="px-5 pb-4 bg-slate-800/30 border-t border-slate-800/50">
-                    <div className="pt-4 grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Tipo</p>
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${
-                          esTransferencia ? 'bg-indigo-500/20 text-indigo-300' :
-                          m.tipo === 'ingreso' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'
-                        }`}>
-                          {esTransferencia ? 'Transferencia' : m.tipo === 'ingreso' ? '↑ Ingreso' : '↓ Egreso'}
-                        </span>
-                      </div>
+                    {editando === m.id ? (
+                      /* ── Formulario de edición ── */
+                      <div className="pt-4 space-y-3">
+                        {/* Tipo (solo si no es transferencia) */}
+                        {!esTransferencia && (
+                          <div className="flex gap-2">
+                            {(['egreso','ingreso'] as const).map(t => (
+                              <button key={t} type="button"
+                                onClick={() => setEditForm(f => ({ ...f, tipo: t, categoria_id: '' }))}
+                                className={`flex-1 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+                                  editForm.tipo === t
+                                    ? t === 'ingreso' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
+                                    : 'bg-slate-700 text-slate-300'
+                                }`}>
+                                {t === 'ingreso' ? '↑ Ingreso' : '↓ Egreso'}
+                              </button>
+                            ))}
+                          </div>
+                        )}
 
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Monto</p>
-                        <p className={`font-bold text-base ${
-                          esTransferencia ? 'text-indigo-400' :
-                          m.tipo === 'ingreso' ? 'text-emerald-400' : 'text-red-400'
-                        }`}>{formatCurrency(m.monto)}</p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Fecha</p>
-                        <p className="text-white">{formatDate(m.fecha)}</p>
-                      </div>
-
-                      {m.cuentas && (
-                        <div>
-                          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
-                            {esTransferencia
-                              ? m.tipo === 'egreso' ? 'Cuenta origen' : 'Cuenta destino'
-                              : 'Cuenta'
-                            }
-                          </p>
-                          <div className="flex items-center gap-1.5">
-                            <Wallet className="w-3.5 h-3.5 text-slate-400" />
-                            <p className="text-white">{m.cuentas.nombre}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs text-slate-400 mb-1">Descripción</label>
+                            <input type="text" value={editForm.descripcion}
+                              onChange={e => setEditForm(f => ({ ...f, descripcion: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-xl border border-slate-600 bg-slate-800 text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-400 mb-1">Monto ($)</label>
+                            <input type="number" step="0.01" min="0.01" value={editForm.monto}
+                              onChange={e => setEditForm(f => ({ ...f, monto: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-xl border border-slate-600 bg-slate-800 text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-400 mb-1">Fecha</label>
+                            <input type="date" value={editForm.fecha}
+                              onChange={e => setEditForm(f => ({ ...f, fecha: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-xl border border-slate-600 bg-slate-800 text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-400 mb-1">Cuenta</label>
+                            <select value={editForm.cuenta_id}
+                              onChange={e => setEditForm(f => ({ ...f, cuenta_id: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-xl border border-slate-600 bg-slate-800 text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                              <option value="">Sin cuenta</option>
+                              {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                            </select>
                           </div>
                         </div>
-                      )}
 
-                      {m.categorias && !esTransferencia && (
+                        {!esTransferencia && (
+                          <div>
+                            <label className="block text-xs text-slate-400 mb-1">Categoría</label>
+                            <select value={editForm.categoria_id}
+                              onChange={e => setEditForm(f => ({ ...f, categoria_id: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-xl border border-slate-600 bg-slate-800 text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                              <option value="">Sin categoría</option>
+                              {categorias.filter((c: any) => c.tipo === editForm.tipo).map((c: any) => (
+                                <option key={c.id} value={c.id}>{c.nombre}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
                         <div>
-                          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Categoría</p>
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.categorias.color }} />
-                            <span className="text-white">{m.categorias.nombre}</span>
-                          </span>
+                          <label className="block text-xs text-slate-400 mb-1">Notas</label>
+                          <textarea value={editForm.notas} rows={2}
+                            onChange={e => setEditForm(f => ({ ...f, notas: e.target.value }))}
+                            placeholder="Detalles adicionales..."
+                            className="w-full px-3 py-2 rounded-xl border border-slate-600 bg-slate-800 text-white text-xs placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
                         </div>
-                      )}
 
-                      {m.notas && (
-                        <div className="col-span-2">
-                          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Notas</p>
-                          <p className="text-slate-300">{m.notas}</p>
+                        {editErr && <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded-lg px-3 py-2">{editErr}</p>}
+
+                        <div className="flex gap-2 pt-1">
+                          <button onClick={() => handleEditSave(m.id)} disabled={editSaving}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition-colors disabled:opacity-50">
+                            <Check className="w-3.5 h-3.5" />
+                            {editSaving ? 'Guardando...' : 'Guardar cambios'}
+                          </button>
+                          <button onClick={() => { setEditando(null); setEditErr('') }}
+                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-semibold rounded-xl transition-colors">
+                            Cancelar
+                          </button>
                         </div>
-                      )}
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-700/50 flex justify-end">
-                      <button onClick={() => handleDelete(m.id)} disabled={deleting === m.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-400 hover:bg-red-900/30 disabled:opacity-50 transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
-                        {deleting === m.id ? 'Eliminando...' : 'Eliminar movimiento'}
-                      </button>
-                    </div>
+                      </div>
+                    ) : (
+                      /* ── Vista de detalles ── */
+                      <>
+                        <div className="pt-4 grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Tipo</p>
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                              esTransferencia ? 'bg-indigo-500/20 text-indigo-300' :
+                              m.tipo === 'ingreso' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'
+                            }`}>
+                              {esTransferencia ? 'Transferencia' : m.tipo === 'ingreso' ? '↑ Ingreso' : '↓ Egreso'}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Monto</p>
+                            <p className={`font-bold text-base ${
+                              esTransferencia ? 'text-indigo-400' :
+                              m.tipo === 'ingreso' ? 'text-emerald-400' : 'text-red-400'
+                            }`}>{formatCurrency(m.monto)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Fecha</p>
+                            <p className="text-white">{formatDate(m.fecha)}</p>
+                          </div>
+                          {m.cuentas && (
+                            <div>
+                              <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                {esTransferencia ? (m.tipo === 'egreso' ? 'Cuenta origen' : 'Cuenta destino') : 'Cuenta'}
+                              </p>
+                              <div className="flex items-center gap-1.5">
+                                <Wallet className="w-3.5 h-3.5 text-slate-400" />
+                                <p className="text-white">{m.cuentas.nombre}</p>
+                              </div>
+                            </div>
+                          )}
+                          {m.categorias && !esTransferencia && (
+                            <div>
+                              <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Categoría</p>
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.categorias.color }} />
+                                <span className="text-white">{m.categorias.nombre}</span>
+                              </span>
+                            </div>
+                          )}
+                          {m.notas && (
+                            <div className="col-span-2">
+                              <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Notas</p>
+                              <p className="text-slate-300">{m.notas}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-slate-700/50 flex items-center justify-between">
+                          {!esTransferencia && (
+                            <button onClick={() => startEdit(m)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-400 hover:bg-indigo-900/30 transition-colors">
+                              <Pencil className="w-3.5 h-3.5" />
+                              Editar
+                            </button>
+                          )}
+                          <button onClick={() => handleDelete(m.id)} disabled={deleting === m.id}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-400 hover:bg-red-900/30 disabled:opacity-50 transition-colors ml-auto">
+                            <Trash2 className="w-3.5 h-3.5" />
+                            {deleting === m.id ? 'Eliminando...' : 'Eliminar'}
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </li>
