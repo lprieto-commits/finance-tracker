@@ -69,8 +69,8 @@ export default async function PresupuestosPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-gray-900">Presupuestos</h1>
-        <p className="text-gray-500 text-sm">{MESES[mes - 1]} {anio}</p>
+        <h1 className="text-2xl font-bold text-white">Presupuestos</h1>
+        <p className="text-slate-500 text-sm mt-0.5">{MESES[mes - 1]} {anio} · Control de gastos por categoría</p>
       </div>
       <PresupuestosClient
         presupuestos={presups}
