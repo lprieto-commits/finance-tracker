@@ -72,13 +72,17 @@ Transacción: "${descripcion}"
 Responde únicamente con el nombre de la categoría.`
   }
 
-  const message = await anthropic.messages.create({
-    model: 'claude-opus-4-5',
-    max_tokens: 1024,
-    messages: [{ role: 'user', content: prompt }],
-  })
+  try {
+    const message = await anthropic.messages.create({
+      model: 'claude-opus-4-5',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
+    })
 
-  const texto = message.content[0].type === 'text' ? message.content[0].text : ''
-
-  return NextResponse.json({ texto })
+    const texto = message.content[0].type === 'text' ? message.content[0].text : ''
+    return NextResponse.json({ texto })
+  } catch (err: any) {
+    console.error('Anthropic error:', err)
+    return NextResponse.json({ error: err?.message ?? 'Error llamando a la IA' }, { status: 500 })
+  }
 }

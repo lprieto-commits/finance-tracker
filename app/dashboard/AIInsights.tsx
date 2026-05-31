@@ -19,11 +19,11 @@ export default function AIInsights({ anio, mes }: { anio: number; mes: number })
         body: JSON.stringify({ tipo: 'insights', anio, mes }),
       })
       const data = await res.json()
-      if (data.error) { setError(data.error); return }
+      if (!res.ok || data.error) { setError(data.error ?? `Error ${res.status}`); return }
       setInsights(data.texto)
       setExpanded(true)
-    } catch {
-      setError('Error al generar insights')
+    } catch (e: any) {
+      setError(e?.message ?? 'Error de conexión')
     } finally {
       setLoading(false)
     }
